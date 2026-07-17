@@ -1,15 +1,25 @@
 // ==UserScript==
 // @name         INFORMS / X-MOL -> EBSCO 一键搜索
+// @name:zh-CN   UTD Easy Reach
+// @name:zh      UTD Easy Reach
+// @name:en      UTD Easy Reach
 // @namespace    https://pubsonline.informs.org/
-// @version      0.6.0
-// @description  在 INFORMS 和指定 INFORMS 期刊的 X-MOL 论文页添加 EBSCO 搜索按钮，并在 EBSCO 登录后自动继续跳转到搜索页。
-// @author       Codex
+// @version      0.7.0
+// @description  Redirect SAGE DOI pages to CNP eReading, and add an EBSCO search button to supported INFORMS and X-MOL article pages.
+// @description:zh-CN 将 SAGE DOI 页面即时跳转到中图易阅，并在 INFORMS 与符合条件的 X-MOL 论文页添加 EBSCO 搜索按钮。
+// @author       Ruan-sz
 // @license      MIT
+// @homepageURL  https://github.com/Ruan-sz/xmol-informs-ebsco-userscript
+// @supportURL   https://github.com/Ruan-sz/xmol-informs-ebsco-userscript/issues
+// @updateURL    https://raw.githubusercontent.com/Ruan-sz/xmol-informs-ebsco-userscript/main/utd-easy-reach.user.js
+// @downloadURL  https://raw.githubusercontent.com/Ruan-sz/xmol-informs-ebsco-userscript/main/utd-easy-reach.user.js
+// @match        https://journals.sagepub.com/doi/abs/*
 // @match        *://pubsonline.informs.org/*
 // @match        *://research.ebsco.com/*
 // @match        *://www.x-mol.com/paper/*
 // @match        *://x-mol.com/paper/*
-// @run-at       document-end
+// @run-at       document-start
+// @noframes
 // @grant        GM_openInTab
 // @grant        GM_setClipboard
 // @grant        GM_setValue
@@ -20,11 +30,12 @@
 (function () {
   'use strict';
 
-  const SCRIPT_VERSION = '0.6.0';
+  const SCRIPT_VERSION = '0.7.0';
   const BUTTON_ID = 'codex-ebsco-search-button';
   const CONTAINER_ID = 'codex-ebsco-search-container';
   const PENDING_SEARCH_KEY = 'codex-ebsco-pending-search';
   const PENDING_SEARCH_TTL_MS = 45 * 60 * 1000;
+  const SOURCE_WATCH_TIMEOUT_MS = 2 * 60 * 1000;
 
   const CONFIG = {
     ebscoBaseUrl: 'https://research.ebsco.com/c/5fvlii/search/results',
@@ -67,7 +78,48 @@
   }
 
   function log(...args) {
-    console.log(`[INFORMS/X-MOL->EBSCO ${SCRIPT_VERSION}]`, ...args);
+    console.log(`[UTD Easy Reach ${SCRIPT_VERSION}]`, ...args);
+  }
+
+  function isHost(hostname) {
+    return location.hostname.toLowerCase() === hostname;
+  }
+
+  function isInformsHost() {
+    return isHost('pubsonline.informs.org');
+  }
+
+  function isEbscoHost() {
+    return isHost('research.ebsco.com');
+  }
+
+  function isXmolHost() {
+    return isHost('x-mol.com') || isHost('www.x-mol.com');
+  }
+
+  function getSageMirrorUrl() {
+    if (!isHost('journals.sagepub.com')) {
+      return '';
+    }
+
+    const prefix = '/doi/abs/';
+    if (!location.pathname.toLowerCase().startsWith(prefix)) {
+      return '';
+    }
+
+    const doiPath = location.pathname.slice(prefix.length).replace(/^\/+/, '');
+    if (!doiPath) {
+      return '';
+    }
+
+    return `https://sage.cnpereading.com/doi/${doiPath}`;
+  }
+
+  // Run this before touching the DOM so SAGE pages do not wait for rendering.
+  const sageMirrorUrl = getSageMirrorUrl();
+  if (sageMirrorUrl) {
+    location.replace(sageMirrorUrl);
+    return;
   }
 
   function getMetaContent(selector) {
@@ -75,19 +127,14 @@
     return normalizeText(node?.content || '');
   }
 
-  function isInformsHost() {
-    return /(^|\.)pubsonline\.informs\.org$/i.test(location.hostname);
-  }
-
-  function isEbscoHost() {
-    return /(^|\.)research\.ebsco\.com$/i.test(location.hostname);
-  }
-
-  function isXmolHost() {
-    return /(^|\.)x-mol\.com$/i.test(location.hostname);
-  }
-
   function getXmolJournalName() {
+    const metaJournal =
+      getMetaContent('meta[name="citation_journal_title"]') ||
+      getMetaContent('meta[name="dc.Source"]');
+    if (metaJournal) {
+      return metaJournal;
+    }
+
     const selectors = [
       'div[class*="PaperInfo-module"][class*="__meta"] a[class*="__journal"]',
       'a[class*="PaperInfo-module"][class*="__journal"]',
@@ -115,11 +162,7 @@
     }
 
     const journalName = getXmolJournalName();
-    if (!journalName) {
-      return false;
-    }
-
-    return INFORMS_JOURNALS.has(normalizeJournalName(journalName));
+    return Boolean(journalName && INFORMS_JOURNALS.has(normalizeJournalName(journalName)));
   }
 
   function isLikelyInformsArticle() {
@@ -136,6 +179,13 @@
     );
   }
 
+  function isPotentialSourcePage() {
+    return (
+      (isInformsHost() && /\/doi\//i.test(location.pathname)) ||
+      (isXmolHost() && /\/paper\//i.test(location.pathname))
+    );
+  }
+
   function getSourceType() {
     if (isLikelyInformsArticle()) {
       return 'informs';
@@ -148,16 +198,7 @@
     return null;
   }
 
-  function getTitleFromInforms() {
-    const metaTitle =
-      getMetaContent('meta[name="citation_title"]') ||
-      getMetaContent('meta[name="dc.Title"]') ||
-      getMetaContent('meta[property="og:title"]');
-
-    if (metaTitle) {
-      return metaTitle;
-    }
-
+  function findInformsTitleNode() {
     const selectors = [
       'h1.citation__title',
       'h1[property="name"]',
@@ -167,16 +208,25 @@
     ];
 
     for (const selector of selectors) {
-      const text = normalizeText(document.querySelector(selector)?.textContent || '');
-      if (text) {
-        return text;
+      const node = document.querySelector(selector);
+      if (normalizeText(node?.textContent || '')) {
+        return node;
       }
     }
 
-    return '';
+    return null;
   }
 
-  function getTitleFromXmol() {
+  function getTitleFromInforms() {
+    const metaTitle =
+      getMetaContent('meta[name="citation_title"]') ||
+      getMetaContent('meta[name="dc.Title"]') ||
+      getMetaContent('meta[property="og:title"]');
+
+    return metaTitle || normalizeText(findInformsTitleNode()?.textContent || '');
+  }
+
+  function findXmolTitleNode() {
     const selectors = [
       'h1[class*="PaperInfo-module"][class*="__title"] a',
       'h1[class*="PaperInfo-module"][class*="__title"]',
@@ -184,10 +234,19 @@
     ];
 
     for (const selector of selectors) {
-      const text = normalizeText(document.querySelector(selector)?.textContent || '');
-      if (text) {
-        return text;
+      const node = document.querySelector(selector);
+      if (normalizeText(node?.textContent || '')) {
+        return node;
       }
+    }
+
+    return null;
+  }
+
+  function getTitleFromXmol() {
+    const visibleTitle = normalizeText(findXmolTitleNode()?.textContent || '');
+    if (visibleTitle) {
+      return visibleTitle;
     }
 
     const ogTitle = getMetaContent('meta[property="og:title"]');
@@ -222,6 +281,14 @@
     return '';
   }
 
+  function createSearchId() {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+
+    return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+
   function buildSearchUrl(title) {
     const query = CONFIG.useExactPhrase ? `"${title}"` : title;
     const url = new URL(CONFIG.ebscoBaseUrl);
@@ -234,7 +301,7 @@
     url.searchParams.set('searchMode', CONFIG.searchMode);
     url.searchParams.set('searchSegment', CONFIG.searchSegment);
     url.searchParams.set('skipResultsFetch', CONFIG.skipResultsFetch);
-    url.searchParams.set('sqId', `sq:${crypto.randomUUID()}`);
+    url.searchParams.set('sqId', `sq:${createSearchId()}`);
 
     return url.toString();
   }
@@ -251,6 +318,12 @@
         savedAt: Date.now(),
       })
     );
+  }
+
+  function clearPendingSearch() {
+    if (typeof GM_deleteValue === 'function') {
+      GM_deleteValue(PENDING_SEARCH_KEY);
+    }
   }
 
   function getPendingSearch() {
@@ -279,12 +352,6 @@
       log('读取待续跳搜索失败', error);
       clearPendingSearch();
       return null;
-    }
-  }
-
-  function clearPendingSearch() {
-    if (typeof GM_deleteValue === 'function') {
-      GM_deleteValue(PENDING_SEARCH_KEY);
     }
   }
 
@@ -429,6 +496,11 @@
     flashButton(copied ? '已打开' : '已跳转');
   }
 
+  function addHoverStyle(button, normal, hover) {
+    button.addEventListener('mouseenter', () => Object.assign(button.style, hover));
+    button.addEventListener('mouseleave', () => Object.assign(button.style, normal));
+  }
+
   function createInformsButton() {
     const button = document.createElement('button');
     button.id = BUTTON_ID;
@@ -440,16 +512,27 @@
     button.title = `复制当前论文标题，并在 EBSCO 中搜索（脚本 ${SCRIPT_VERSION}）`;
     button.addEventListener('click', handleClick);
 
+    const normalStyle = {
+      transform: 'translateY(0)',
+      boxShadow: '0 6px 16px rgba(10, 87, 204, 0.24)',
+      background: '#0a57cc',
+    };
+    const hoverStyle = {
+      transform: 'translateY(-1px)',
+      boxShadow: '0 10px 22px rgba(10, 87, 204, 0.28)',
+      background: '#084db6',
+    };
+
     Object.assign(button.style, {
       display: 'inline-flex',
       alignItems: 'center',
       justifyContent: 'center',
-      width: '100%',
+      width: 'auto',
+      minWidth: '142px',
       minHeight: '44px',
       padding: '12px 16px',
       border: 'none',
       borderRadius: '6px',
-      background: '#0a57cc',
       color: '#ffffff',
       fontSize: '15px',
       fontWeight: '700',
@@ -457,21 +540,10 @@
       lineHeight: '1.2',
       letterSpacing: '0.01em',
       transition: 'transform 160ms ease, box-shadow 160ms ease, background 160ms ease',
-      boxShadow: '0 6px 16px rgba(10, 87, 204, 0.24)',
+      ...normalStyle,
     });
 
-    button.addEventListener('mouseenter', () => {
-      button.style.transform = 'translateY(-1px)';
-      button.style.boxShadow = '0 10px 22px rgba(10, 87, 204, 0.28)';
-      button.style.background = '#084db6';
-    });
-
-    button.addEventListener('mouseleave', () => {
-      button.style.transform = 'translateY(0)';
-      button.style.boxShadow = '0 6px 16px rgba(10, 87, 204, 0.24)';
-      button.style.background = '#0a57cc';
-    });
-
+    addHoverStyle(button, normalStyle, hoverStyle);
     return button;
   }
 
@@ -486,6 +558,17 @@
     button.title = `复制当前论文标题，并在 EBSCO 中搜索（脚本 ${SCRIPT_VERSION}）`;
     button.addEventListener('click', handleClick);
 
+    const normalStyle = {
+      background: '#ffffff',
+      color: 'rgb(39, 158, 242)',
+      borderColor: 'rgb(39, 158, 242)',
+    };
+    const hoverStyle = {
+      background: 'rgb(39, 158, 242)',
+      color: '#ffffff',
+      borderColor: 'rgb(39, 158, 242)',
+    };
+
     Object.assign(button.style, {
       display: 'inline-flex',
       alignItems: 'center',
@@ -495,50 +578,51 @@
       padding: '0 14px',
       border: '1px solid rgb(39, 158, 242)',
       borderRadius: '3px',
-      background: '#ffffff',
-      color: 'rgb(39, 158, 242)',
       fontSize: '13px',
       fontWeight: '500',
       cursor: 'pointer',
       lineHeight: '1',
       transition: 'all 0.2s ease',
       whiteSpace: 'nowrap',
+      ...normalStyle,
     });
 
-    button.addEventListener('mouseenter', () => {
-      button.style.background = 'rgb(39, 158, 242)';
-      button.style.color = '#ffffff';
-      button.style.borderColor = 'rgb(39, 158, 242)';
-    });
-
-    button.addEventListener('mouseleave', () => {
-      button.style.background = '#ffffff';
-      button.style.color = 'rgb(39, 158, 242)';
-      button.style.borderColor = 'rgb(39, 158, 242)';
-    });
-
+    addHoverStyle(button, normalStyle, hoverStyle);
     return button;
   }
 
   function createContainerForSource(sourceType) {
     const container = document.createElement('div');
     container.id = CONTAINER_ID;
+    container.dataset.sourceType = sourceType;
+    container.style.boxSizing = 'border-box';
+    container.appendChild(sourceType === 'xmol' ? createXmolButton() : createInformsButton());
+    return container;
+  }
+
+  function applyPlacementStyle(container, sourceType, target) {
+    const button = container.querySelector(`#${BUTTON_ID}`);
+    if (!button) {
+      return;
+    }
 
     if (sourceType === 'xmol') {
       Object.assign(container.style, {
         display: 'inline-flex',
         alignItems: 'center',
+        width: 'auto',
+        margin: target.isFallback ? '8px 8px 8px 0' : '0 8px 0 0',
       });
-      container.appendChild(createXmolButton());
-      return container;
+      return;
     }
 
+    const inSidebar = target.placement === 'sidebar';
     Object.assign(container.style, {
-      width: '100%',
-      margin: '14px 0 18px',
+      display: inSidebar ? 'block' : 'inline-block',
+      width: inSidebar ? '100%' : 'auto',
+      margin: inSidebar ? '14px 0 18px' : '10px 0 16px',
     });
-    container.appendChild(createInformsButton());
-    return container;
+    button.style.width = inSidebar ? '100%' : 'auto';
   }
 
   function findInformsInsertionTarget() {
@@ -551,6 +635,8 @@
       return {
         parent: sidebarSection.parentElement,
         before: sidebarSection,
+        rank: 40,
+        placement: 'sidebar',
       };
     }
 
@@ -563,6 +649,8 @@
       return {
         parent: abstractBlock.parentElement,
         before: abstractBlock,
+        rank: 30,
+        placement: 'content',
       };
     }
 
@@ -571,6 +659,19 @@
       return {
         parent: citationBlock.parentElement,
         before: citationBlock.nextSibling,
+        rank: 20,
+        placement: 'content',
+      };
+    }
+
+    const titleNode = findInformsTitleNode();
+    if (titleNode?.parentElement) {
+      return {
+        parent: titleNode.parentElement,
+        before: titleNode.nextSibling,
+        rank: 10,
+        placement: 'content',
+        isFallback: true,
       };
     }
 
@@ -583,6 +684,8 @@
       return {
         parent: favoriteGroup.parentElement,
         before: favoriteGroup,
+        rank: 40,
+        placement: 'actions',
       };
     }
 
@@ -591,6 +694,8 @@
       return {
         parent: actionButtons,
         before: null,
+        rank: 30,
+        placement: 'actions',
       };
     }
 
@@ -599,6 +704,19 @@
       return {
         parent: actionLinks.parentElement,
         before: actionLinks,
+        rank: 20,
+        placement: 'actions',
+      };
+    }
+
+    const titleNode = findXmolTitleNode();
+    if (titleNode?.parentElement) {
+      return {
+        parent: titleNode.parentElement,
+        before: titleNode.nextSibling,
+        rank: 10,
+        placement: 'title',
+        isFallback: true,
       };
     }
 
@@ -606,71 +724,90 @@
   }
 
   function findInsertionTarget(sourceType) {
-    if (sourceType === 'xmol') {
-      return findXmolInsertionTarget();
-    }
-
-    return findInformsInsertionTarget();
+    return sourceType === 'xmol' ? findXmolInsertionTarget() : findInformsInsertionTarget();
   }
 
-  function mountButton() {
-    if (document.getElementById(CONTAINER_ID)) {
-      return true;
-    }
-
+  function mountOrMoveButton() {
     const sourceType = getSourceType();
-    if (!sourceType) {
+    if (!sourceType || !getArticleTitle()) {
       return false;
     }
 
     const target = findInsertionTarget(sourceType);
-    if (!target) {
+    if (!target?.parent?.isConnected) {
       return false;
     }
 
-    target.parent.insertBefore(createContainerForSource(sourceType), target.before || null);
-    return true;
+    let container = document.getElementById(CONTAINER_ID);
+    if (!container) {
+      container = createContainerForSource(sourceType);
+    }
+
+    const currentRank = Number(container.dataset.mountRank || 0);
+    const shouldMove =
+      !container.isConnected ||
+      target.rank > currentRank ||
+      (target.rank === currentRank && container.parentElement !== target.parent);
+
+    if (shouldMove) {
+      target.parent.insertBefore(container, target.before || null);
+      container.dataset.mountRank = String(target.rank);
+      applyPlacementStyle(container, sourceType, target);
+      log(target.isFallback ? '标题已出现，提前显示按钮' : '按钮已放到首选位置');
+    }
+
+    return container.isConnected;
   }
 
-  function startSourceMountLoop() {
+  function startSourceWatcher() {
+    let scheduled = false;
+    let stopped = false;
+
     const tryMount = () => {
-      if (!getSourceType()) {
+      scheduled = false;
+      if (!stopped && isPotentialSourcePage()) {
+        mountOrMoveButton();
+      }
+    };
+
+    const scheduleMount = () => {
+      if (scheduled || stopped) {
         return;
       }
-      mountButton();
+
+      scheduled = true;
+      window.requestAnimationFrame(tryMount);
+    };
+
+    const observer = new MutationObserver(scheduleMount);
+    observer.observe(document, { childList: true, subtree: true });
+
+    const intervalId = window.setInterval(tryMount, 500);
+    const stop = () => {
+      if (stopped) {
+        return;
+      }
+
+      tryMount();
+      stopped = true;
+      observer.disconnect();
+      window.clearInterval(intervalId);
     };
 
     tryMount();
-
-    const observer = new MutationObserver(() => {
-      tryMount();
-    });
-
-    observer.observe(document.documentElement, {
-      childList: true,
-      subtree: true,
-    });
-
-    const intervalId = window.setInterval(tryMount, 1200);
-
-    window.setTimeout(() => {
-      observer.disconnect();
-      window.clearInterval(intervalId);
-      tryMount();
-    }, 30000);
-  }
-
-  function initSourcePage() {
-    if (!document.body || !getSourceType()) {
-      return;
-    }
-
-    log('开始挂载来源页按钮', location.href);
-    startSourceMountLoop();
+    window.setTimeout(stop, SOURCE_WATCH_TIMEOUT_MS);
+    window.addEventListener(
+      'load',
+      () => {
+        tryMount();
+        window.setTimeout(stop, 15000);
+      },
+      { once: true }
+    );
   }
 
   function initEbscoPage() {
-    if (!document.body || !isEbscoHost()) {
+    if (!isEbscoHost()) {
       return;
     }
 
@@ -679,22 +816,14 @@
     window.setTimeout(maybeContinuePendingSearch, 4000);
   }
 
-  function init() {
-    if (getSourceType()) {
-      initSourcePage();
-      return;
-    }
-
-    if (isEbscoHost()) {
+  if (isPotentialSourcePage()) {
+    log('从 document-start 开始观察论文页结构', location.href);
+    startSourceWatcher();
+  } else if (isEbscoHost()) {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initEbscoPage, { once: true });
+    } else {
       initEbscoPage();
     }
   }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init, { once: true });
-  } else {
-    init();
-  }
-
-  window.addEventListener('load', init, { once: true });
 })();
