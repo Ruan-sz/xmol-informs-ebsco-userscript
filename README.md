@@ -22,7 +22,7 @@
 
 为避免 Tampermonkey 把升级版识别成全新的脚本，代码保留了旧版的基础 `@name` 和 `@namespace`，并通过本地化名称显示为 `UTD Easy Reach`。第一次升级时重新打开上面的 Raw 地址并安装，Tampermonkey 应提示更新或覆盖现有脚本，而不是新增副本。
 
-仓库同时保留旧文件名 `informs-to-ebsco.user.js` 作为兼容入口，其内容与新版文件完全相同。曾经从旧 GitHub Raw 地址安装的用户仍可检查到 `0.7.0`，升级后会通过新的 `@updateURL` 转到 `utd-easy-reach.user.js`。
+仓库同时保留旧文件名 `informs-to-ebsco.user.js` 作为兼容入口，其内容与新版文件完全相同。曾经从旧 GitHub Raw 地址安装的用户仍可检查到 `0.7.1` 及后续版本，升级后会通过新的 `@updateURL` 转到 `utd-easy-reach.user.js`。
 
 如果此前已经产生两个副本，请保留版本号较高的 `UTD Easy Reach`，停用或删除旧副本即可。
 

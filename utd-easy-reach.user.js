@@ -4,9 +4,11 @@
 // @name:zh      UTD Easy Reach
 // @name:en      UTD Easy Reach
 // @namespace    https://pubsonline.informs.org/
-// @version      0.7.0
+// @version      0.7.1
 // @description  Redirect SAGE DOI pages to CNP eReading, and add an EBSCO search button to supported INFORMS and X-MOL article pages.
 // @description:zh-CN 将 SAGE DOI 页面即时跳转到中图易阅，并在 INFORMS 与符合条件的 X-MOL 论文页添加 EBSCO 搜索按钮。
+// @description:zh 将 SAGE DOI 页面即时跳转到中图易阅，并在 INFORMS 与符合条件的 X-MOL 论文页添加 EBSCO 搜索按钮。
+// @description:en Redirect SAGE DOI pages to CNP eReading, and add an EBSCO search button to supported INFORMS and X-MOL article pages.
 // @author       Ruan-sz
 // @license      MIT
 // @homepageURL  https://github.com/Ruan-sz/xmol-informs-ebsco-userscript
@@ -30,7 +32,7 @@
 (function () {
   'use strict';
 
-  const SCRIPT_VERSION = '0.7.0';
+  const SCRIPT_VERSION = '0.7.1';
   const BUTTON_ID = 'codex-ebsco-search-button';
   const CONTAINER_ID = 'codex-ebsco-search-container';
   const PENDING_SEARCH_KEY = 'codex-ebsco-pending-search';

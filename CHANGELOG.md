@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.1
+
+- 补齐 `@name:en`、`@name:zh` 对应的本地化 `@description`，修复 Greasy Fork URL 同步校验错误。
+
 ## 0.7.0
 
 - 新增 SAGE DOI 页面到中图易阅的 `document-start` 即时重定向。
