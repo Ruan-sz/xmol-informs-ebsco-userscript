@@ -1,40 +1,31 @@
 # UTD Easy Reach
 
-一个用于简化论文访问流程的 Tampermonkey 用户脚本。目前覆盖 SAGE、INFORMS、X-MOL 和 EBSCO。
+一个简化论文访问流程的 Tampermonkey 用户脚本。目前支持 SAGE 到中图易阅的即时跳转，以及 INFORMS/X-MOL 到 EBSCO 的一键检索。
 
-## 功能
+## 安装与使用
 
-- 访问 `https://journals.sagepub.com/doi/abs/<DOI>` 时，在 `document-start` 阶段立即跳转到 `https://sage.cnpereading.com/doi/<DOI>`。
-- 在 `pubsonline.informs.org` 论文页添加 `EBSCO 搜索` 按钮。
-- 在 X-MOL 论文页中，仅当论文所属期刊位于 INFORMS 白名单时显示 `EBSCO 搜索` 按钮。
-- INFORMS/X-MOL 的标题一旦出现在页面中就尝试显示按钮，不等待整页加载完成；完整布局出现后，按钮会自动移动到原有的首选位置。
-- 点击按钮后复制论文标题并打开 EBSCO 搜索页；如果 EBSCO 先要求登录，登录完成后会继续进入原搜索结果。
+### 1. 安装 Tampermonkey
 
-## 安装与更新
+> 已经安装 Tampermonkey 且能够正常运行用户脚本的用户，可以直接跳到第 2 步。
 
-推荐通过以下 Raw 地址安装：
+1. 打开 [Tampermonkey 官方网站](https://www.tampermonkey.net/)。
+2. 选择正在使用的浏览器，并从浏览器扩展商店安装 Tampermonkey。
+3. Chrome 或 Edge 如果提示“请启用允许用户脚本”，请进入扩展管理页，打开 Tampermonkey 的“允许用户脚本”选项。
+
+### 2. 安装 UTD Easy Reach
+
+如果正在 Greasy Fork 查看本脚本，点击页面顶部的“安装此脚本”，然后在 Tampermonkey 安装页确认安装。
+
+也可以直接打开 GitHub Raw 安装地址：
 
 <https://raw.githubusercontent.com/Ruan-sz/xmol-informs-ebsco-userscript/main/utd-easy-reach.user.js>
 
-脚本包含固定的 `@updateURL`、`@downloadURL` 和递增的 `@version`。通过上述地址安装后，Tampermonkey 可以从 GitHub 检查后续版本。
+### 3. 使用脚本
 
-### 从旧版升级
-
-为避免 Tampermonkey 把升级版识别成全新的脚本，代码保留了旧版的基础 `@name` 和 `@namespace`，并通过本地化名称显示为 `UTD Easy Reach`。第一次升级时重新打开上面的 Raw 地址并安装，Tampermonkey 应提示更新或覆盖现有脚本，而不是新增副本。
-
-仓库同时保留旧文件名 `informs-to-ebsco.user.js` 作为兼容入口，其内容与新版文件完全相同。曾经从旧 GitHub Raw 地址安装的用户仍可检查到 `0.7.1` 及后续版本，升级后会通过新的 `@updateURL` 转到 `utd-easy-reach.user.js`。
-
-如果此前已经产生两个副本，请保留版本号较高的 `UTD Easy Reach`，停用或删除旧副本即可。
-
-## Greasy Fork 同步
-
-在 Greasy Fork 的“从 URL 导入”或现有脚本的“代码同步”页面填写以下地址，并选择自动同步：
-
-```text
-https://raw.githubusercontent.com/Ruan-sz/xmol-informs-ebsco-userscript/main/utd-easy-reach.user.js
-```
-
-必须使用这个指向 `main` 分支的 Raw `.user.js` 地址，不能使用 GitHub 仓库页、`blob` 页面或某次提交的固定地址。每次发布时同时提高 `@version`，Tampermonkey 才会识别到新版本。
+- SAGE：访问 `https://journals.sagepub.com/doi/abs/<DOI>` 后，脚本会立即跳转到 `https://sage.cnpereading.com/doi/<DOI>`，无需点击按钮。
+- INFORMS：进入论文详情页，标题出现后页面会显示 `EBSCO 搜索` 按钮；点击后复制标题并打开 EBSCO 搜索结果。
+- X-MOL：当论文属于下方 INFORMS 期刊白名单时显示 `EBSCO 搜索` 按钮。
+- EBSCO：如果第一次进入时要求登录，完成登录后脚本会继续进入原本的搜索结果页。
 
 ## 支持站点
 
@@ -63,13 +54,48 @@ https://raw.githubusercontent.com/Ruan-sz/xmol-informs-ebsco-userscript/main/utd
 - Strategy Science
 - Transportation Science
 
+## 更新与 Greasy Fork 同步
+
+脚本包含 `@updateURL`、`@downloadURL` 和递增的 `@version`，通过 Greasy Fork 或 GitHub Raw 安装后，可由 Tampermonkey 检查后续更新。
+
+Greasy Fork 的源码与附加信息需要在脚本的“管理 / Admin”页分别设置同步地址：
+
+代码同步地址：
+
+```text
+https://raw.githubusercontent.com/Ruan-sz/xmol-informs-ebsco-userscript/main/utd-easy-reach.user.js
+```
+
+附加信息同步地址：
+
+```text
+https://raw.githubusercontent.com/Ruan-sz/xmol-informs-ebsco-userscript/main/GREASYFORK.md
+```
+
+两项都应指向 `main` 分支上的 Raw 文件，而不是 GitHub 的仓库页、`blob` 页面或某次提交的固定地址。`GREASYFORK.md` 也可以直接复制到 Greasy Fork 的“附加信息”编辑框，并选择 Markdown。
+
+## 从旧版升级
+
+`0.8.0` 起基础标题正式改为 `UTD Easy Reach`，但继续保留原 `@namespace`、更新地址和旧文件名兼容入口。通过原更新渠道升级通常会直接改名；如果手动安装后出现两个副本，请保留版本号较高的 `UTD Easy Reach`，停用或删除旧版。
+
+仓库中的 `informs-to-ebsco.user.js` 与主脚本内容完全相同，仅用于兼容曾从旧 GitHub Raw 地址安装的用户。
+
+## 隐私与使用范围
+
+- 脚本不收集或上传个人数据。
+- 点击 EBSCO 按钮时，只会读取并复制当前论文标题。
+- EBSCO 待续跳记录仅保存在用户脚本本地存储中，并会在完成或过期后清除。
+- 脚本用于简化合法订阅资源的访问流程，不绕过网站登录或机构授权。
+
 ## 项目结构
 
-- `utd-easy-reach.user.js`：可直接安装和发布到 Greasy Fork 的完整用户脚本。
-- `informs-to-ebsco.user.js`：与主脚本相同的旧地址兼容镜像，不用于新的 Greasy Fork 同步配置。
+- `utd-easy-reach.user.js`：主用户脚本，也是 Greasy Fork 的代码同步来源。
+- `informs-to-ebsco.user.js`：旧地址兼容镜像。
+- `GREASYFORK.md`：Greasy Fork 附加信息的同步来源及可复制 Markdown。
+- `CHANGELOG.md`：版本更新记录。
 - `LICENSE`：MIT 许可证。
 
-仓库暂时保留原名称，以保证现有链接稳定；脚本及文档统一使用 `UTD Easy Reach`。
+仓库暂时保留原名称，以保证已有链接稳定；脚本和文档统一使用 `UTD Easy Reach`。
 
 ## 许可证
 

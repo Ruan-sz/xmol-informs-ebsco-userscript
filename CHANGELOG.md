@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.0
+
+- 基础脚本标题正式改为 `UTD Easy Reach`，并缩短中英文简介。
+- 新增可供 Greasy Fork 单独同步或手动复制的 `GREASYFORK.md`。
+- 重写 GitHub 安装文档，从 Tampermonkey 下载、权限设置到脚本使用完整说明。
+
 ## 0.7.1
 
 - 补齐 `@name:en`、`@name:zh` 对应的本地化 `@description`，修复 Greasy Fork URL 同步校验错误。
