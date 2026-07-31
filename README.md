@@ -1,6 +1,6 @@
 # UTD Easy Reach
 
-一个简化论文访问流程的 Tampermonkey 用户脚本。目前支持 SAGE 到中图易阅的即时跳转，以及 INFORMS/X-MOL 到 EBSCO 的一键检索。
+一个简化论文访问流程的 Tampermonkey 用户脚本。目前支持 SAGE 与 Wiley POMS 旧链接到中图易阅的即时跳转，以及 INFORMS/X-MOL 到 EBSCO 的一键检索。
 
 ## 安装与使用
 
@@ -22,14 +22,16 @@
 
 ### 3. 使用脚本
 
-- SAGE：访问 `https://journals.sagepub.com/doi/abs/<DOI>` 后，脚本会立即跳转到 `https://sage.cnpereading.com/doi/<DOI>`，无需点击按钮。
+- SAGE：访问 `https://journals.sagepub.com/doi/<DOI>`、`/doi/abs/<DOI>` 等 DOI 页面后，脚本会立即跳转到 `https://sage.cnpereading.com/doi/<DOI>`，无需点击按钮。
+- Wiley POMS：访问 `https://onlinelibrary.wiley.com/doi/.../10.1111/poms.*` 的 POMS 旧页面时，同样会立即跳转到中图易阅；其他 Wiley 期刊不受影响。
 - INFORMS：进入论文详情页，标题出现后页面会显示 `EBSCO 搜索` 按钮；点击后复制标题并打开 EBSCO 搜索结果。
 - X-MOL：当论文属于下方 INFORMS 期刊白名单时显示 `EBSCO 搜索` 按钮。
 - EBSCO：如果第一次进入时要求登录，完成登录后脚本会继续进入原本的搜索结果页。
 
 ## 支持站点
 
-- `https://journals.sagepub.com/doi/abs/*`
+- `https://journals.sagepub.com/doi/*`
+- `https://onlinelibrary.wiley.com/doi/*`（仅重定向 `10.1111/poms.*`）
 - `https://pubsonline.informs.org/*`
 - `https://research.ebsco.com/*`
 - `https://www.x-mol.com/paper/*`
@@ -93,9 +95,16 @@ https://raw.githubusercontent.com/Ruan-sz/xmol-informs-ebsco-userscript/main/GRE
 - `informs-to-ebsco.user.js`：旧地址兼容镜像。
 - `GREASYFORK.md`：Greasy Fork 附加信息的同步来源及可复制 Markdown。
 - `CHANGELOG.md`：版本更新记录。
+- `tests/redirect-smoke.cjs`：SAGE/Wiley DOI 重定向冒烟测试。
 - `LICENSE`：MIT 许可证。
 
 仓库暂时保留原名称，以保证已有链接稳定；脚本和文档统一使用 `UTD Easy Reach`。
+
+运行重定向测试：
+
+```powershell
+node tests/redirect-smoke.cjs
+```
 
 ## 许可证
 

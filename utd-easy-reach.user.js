@@ -4,18 +4,19 @@
 // @name:zh      UTD Easy Reach
 // @name:en      UTD Easy Reach
 // @namespace    https://pubsonline.informs.org/
-// @version      0.8.0
-// @description  Fast access to SAGE articles through CNP eReading and one-click EBSCO search from INFORMS/X-MOL.
-// @description:zh-CN 快速跳转 SAGE 中图易阅，并从 INFORMS/X-MOL 一键检索 EBSCO。
-// @description:zh 快速跳转 SAGE 中图易阅，并从 INFORMS/X-MOL 一键检索 EBSCO。
-// @description:en Fast access to SAGE articles through CNP eReading and one-click EBSCO search from INFORMS/X-MOL.
+// @version      0.8.1
+// @description  Redirect SAGE and legacy Wiley POMS DOI pages to CNP eReading, with one-click EBSCO search from INFORMS/X-MOL.
+// @description:zh-CN 将 SAGE 与 Wiley POMS DOI 页面跳转到中图易阅，并从 INFORMS/X-MOL 一键检索 EBSCO。
+// @description:zh 将 SAGE 与 Wiley POMS DOI 页面跳转到中图易阅，并从 INFORMS/X-MOL 一键检索 EBSCO。
+// @description:en Redirect SAGE and legacy Wiley POMS DOI pages to CNP eReading, with one-click EBSCO search from INFORMS/X-MOL.
 // @author       Ruan-sz
 // @license      MIT
 // @homepageURL  https://github.com/Ruan-sz/xmol-informs-ebsco-userscript
 // @supportURL   https://github.com/Ruan-sz/xmol-informs-ebsco-userscript/issues
 // @updateURL    https://raw.githubusercontent.com/Ruan-sz/xmol-informs-ebsco-userscript/main/utd-easy-reach.user.js
 // @downloadURL  https://raw.githubusercontent.com/Ruan-sz/xmol-informs-ebsco-userscript/main/utd-easy-reach.user.js
-// @match        https://journals.sagepub.com/doi/abs/*
+// @match        https://journals.sagepub.com/doi/*
+// @match        https://onlinelibrary.wiley.com/doi/*
 // @match        *://pubsonline.informs.org/*
 // @match        *://research.ebsco.com/*
 // @match        *://www.x-mol.com/paper/*
@@ -32,7 +33,7 @@
 (function () {
   'use strict';
 
-  const SCRIPT_VERSION = '0.8.0';
+  const SCRIPT_VERSION = '0.8.1';
   const BUTTON_ID = 'codex-ebsco-search-button';
   const CONTAINER_ID = 'codex-ebsco-search-container';
   const PENDING_SEARCH_KEY = 'codex-ebsco-pending-search';
@@ -99,28 +100,42 @@
     return isHost('x-mol.com') || isHost('www.x-mol.com');
   }
 
-  function getSageMirrorUrl() {
-    if (!isHost('journals.sagepub.com')) {
+  function extractDoiFromPath() {
+    const match = location.pathname.match(
+      /^\/doi\/(?:(?:abs|full|pdf|epdf)\/)?(10\.\d{4,9}\/.+)$/i
+    );
+    if (!match) {
       return '';
     }
 
-    const prefix = '/doi/abs/';
-    if (!location.pathname.toLowerCase().startsWith(prefix)) {
+    const encodedDoi = match[1].replace(/\/+$/, '');
+    try {
+      return decodeURIComponent(encodedDoi);
+    } catch (error) {
+      log('DOI 路径解码失败', error);
       return '';
     }
-
-    const doiPath = location.pathname.slice(prefix.length).replace(/^\/+/, '');
-    if (!doiPath) {
-      return '';
-    }
-
-    return `https://sage.cnpereading.com/doi/${doiPath}`;
   }
 
-  // Run this before touching the DOM so SAGE pages do not wait for rendering.
-  const sageMirrorUrl = getSageMirrorUrl();
-  if (sageMirrorUrl) {
-    location.replace(sageMirrorUrl);
+  function getCnpEreadingUrl() {
+    const isSageArticle = isHost('journals.sagepub.com');
+    const isWileyArticle = isHost('onlinelibrary.wiley.com');
+    if (!isSageArticle && !isWileyArticle) {
+      return '';
+    }
+
+    const doi = extractDoiFromPath();
+    if (!doi || (isWileyArticle && !/^10\.1111\/poms\./i.test(doi))) {
+      return '';
+    }
+
+    return `https://sage.cnpereading.com/doi/${encodeURI(doi)}`;
+  }
+
+  // Run this before touching the DOM so publisher pages do not wait for rendering.
+  const cnpEreadingUrl = getCnpEreadingUrl();
+  if (cnpEreadingUrl) {
+    location.replace(cnpEreadingUrl);
     return;
   }
 

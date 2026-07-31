@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.1
+
+- 支持 SAGE 的 `/doi/<DOI>` 以及 `abs`、`full`、`pdf`、`epdf` DOI 路径。
+- 支持将 Wiley 上 `10.1111/poms.*` 的 POMS 旧链接跳转到 SAGE 中图易阅。
+- Wiley 重定向严格限制为 POMS DOI，避免影响其他 Wiley 期刊。
+
 ## 0.8.0
 
 - 基础脚本标题正式改为 `UTD Easy Reach`，并缩短中英文简介。

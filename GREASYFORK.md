@@ -1,6 +1,6 @@
 # UTD Easy Reach
 
-快速跳转 SAGE 中图易阅，并从 INFORMS/X-MOL 一键检索 EBSCO。
+快速将 SAGE 与 Wiley POMS 旧链接跳转到中图易阅，并从 INFORMS/X-MOL 一键检索 EBSCO。
 
 ## 安装与使用
 
@@ -22,14 +22,15 @@
 
 ### 3. 使用脚本
 
-- SAGE：访问 `https://journals.sagepub.com/doi/abs/<DOI>` 后，自动跳转到 `https://sage.cnpereading.com/doi/<DOI>`。
+- SAGE：访问 `https://journals.sagepub.com/doi/<DOI>`、`/doi/abs/<DOI>` 等 DOI 页面后，自动跳转到 `https://sage.cnpereading.com/doi/<DOI>`。
+- Wiley POMS：访问 `https://onlinelibrary.wiley.com/doi/.../10.1111/poms.*` 的旧页面时自动跳转；其他 Wiley 期刊不受影响。
 - INFORMS：进入论文详情页，标题出现后点击 `EBSCO 搜索`。
 - X-MOL：属于支持期刊的论文页会显示 `EBSCO 搜索` 按钮。
 - EBSCO：如果先要求登录，完成登录后会继续进入原搜索结果。
 
 ## 主要功能
 
-- 在页面加载初期完成 SAGE 重定向，不等待全文页面渲染。
+- 在页面加载初期完成 SAGE/Wiley POMS 重定向，不等待全文页面渲染。
 - INFORMS/X-MOL 标题出现后尽快显示按钮，不等待整页加载完成。
 - 自动复制论文标题并构造 EBSCO 搜索链接。
 - 记住登录前的 EBSCO 搜索，登录完成后自动续跳。
