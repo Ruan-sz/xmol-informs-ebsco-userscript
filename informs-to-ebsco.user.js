@@ -4,11 +4,11 @@
 // @name:zh      UTD Easy Reach
 // @name:en      UTD Easy Reach
 // @namespace    https://pubsonline.informs.org/
-// @version      0.9.0
-// @description  Reach SAGE and Wiley POMS via CNP eReading, search EBSCO from INFORMS/X-MOL, and name EBSCO PDFs after article titles.
-// @description:zh-CN 快速访问 SAGE/Wiley POMS，从 INFORMS/X-MOL 检索 EBSCO，并以论文标题命名 EBSCO PDF。
-// @description:zh 快速访问 SAGE/Wiley POMS，从 INFORMS/X-MOL 检索 EBSCO，并以论文标题命名 EBSCO PDF。
-// @description:en Reach SAGE and Wiley POMS via CNP eReading, search EBSCO from INFORMS/X-MOL, and name EBSCO PDFs after article titles.
+// @version      0.10.0
+// @description  Reach SAGE/Wiley POMS, search EBSCO from INFORMS/X-MOL, and name EBSCO PDFs with author, year, INFORMS journal code and title.
+// @description:zh-CN 快速访问 SAGE/Wiley POMS，从 INFORMS/X-MOL 检索 EBSCO，并以作者、年份、期刊代码和标题命名 PDF。
+// @description:zh 快速访问 SAGE/Wiley POMS，从 INFORMS/X-MOL 检索 EBSCO，并以作者、年份、期刊代码和标题命名 PDF。
+// @description:en Reach SAGE/Wiley POMS, search EBSCO from INFORMS/X-MOL, and name EBSCO PDFs with author, year, INFORMS journal code and title.
 // @author       Ruan-sz
 // @license      MIT
 // @homepageURL  https://github.com/Ruan-sz/xmol-informs-ebsco-userscript
@@ -34,7 +34,7 @@
 (function () {
   'use strict';
 
-  const SCRIPT_VERSION = '0.9.0';
+  const SCRIPT_VERSION = '0.10.0';
   const BUTTON_ID = 'codex-ebsco-search-button';
   const CONTAINER_ID = 'codex-ebsco-search-container';
   const PENDING_SEARCH_KEY = 'codex-ebsco-pending-search';
@@ -53,32 +53,37 @@
     useExactPhrase: false,
   };
 
-  const INFORMS_JOURNALS = new Set([
-    'Decision Analysis',
-    'Information Systems Research',
-    'INFORMS Journal on Applied Analytics',
-    'INFORMS Journal on Computing',
-    'INFORMS Journal on Data Science',
-    'INFORMS Journal on Optimization',
-    'INFORMS Transactions on Education',
-    'Management Science',
-    'Manufacturing & Service Operations Management',
-    'Marketing Science',
-    'Mathematics of Operations Research',
-    'Operations Research',
-    'Organization Science',
-    'Service Science',
-    'Stochastic Systems',
-    'Strategy Science',
-    'Transportation Science',
-  ].map((name) => normalizeJournalName(name)));
+  const INFORMS_JOURNALS = new Map([
+    ['Decision Analysis', 'deca'],
+    ['Information Systems Research', 'isre'],
+    ['INFORMS Journal on Applied Analytics', 'ijaa'],
+    ['INFORMS Journal on Computing', 'ijoc'],
+    ['INFORMS Journal on Data Science', 'ijds'],
+    ['INFORMS Journal on Optimization', 'ijoo'],
+    ['INFORMS Transactions on Education', 'ited'],
+    ['Management Science', 'mnsc'],
+    ['Manufacturing & Service Operations Management', 'msom'],
+    ['Marketing Science', 'mksc'],
+    ['Mathematics of Operations Research', 'moor'],
+    ['Operations Research', 'opre'],
+    ['Organization Science', 'orsc'],
+    ['Service Science', 'serv'],
+    ['Stochastic Systems', 'stsy'],
+    ['Strategy Science', 'stsc'],
+    ['Transportation Science', 'trsc'],
+  ].map(([name, code]) => [normalizeJournalName(name), code]));
 
   function normalizeText(text) {
     return (text || '').replace(/\s+/g, ' ').trim();
   }
 
   function normalizeJournalName(text) {
-    return normalizeText(text).toLowerCase();
+    return normalizeText(text)
+      .normalize('NFKC')
+      .toLowerCase()
+      .replace(/\s*\(informs\)\s*$/i, '')
+      .replace(/\s+and\s+/g, ' & ')
+      .replace(/\s*&\s*/g, ' & ');
   }
 
   function log(...args) {
@@ -429,10 +434,15 @@
     location.replace(pending.url);
   }
 
-  function buildPdfFilename(title) {
-    let stem = normalizeText(title)
+  function buildPdfFilename(title, citation = {}) {
+    const paperTitle = normalizeText(title).replace(/\.pdf$/i, '').replace(/[. ]+$/g, '');
+    if (!paperTitle) {
+      return '';
+    }
+
+    const prefix = `${citation.author || ''}${citation.year || ''}${citation.journalCode || ''}`;
+    let stem = (prefix ? `${prefix}. ${paperTitle}` : paperTitle)
       .normalize('NFC')
-      .replace(/\.pdf$/i, '')
       .replace(/[<>:"/\\|?*\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g, ' ')
       .replace(/\s+/g, ' ')
       .trim()
@@ -484,6 +494,69 @@
     return /^EBSCO(?:host)?$/i.test(title) ? '' : title;
   }
 
+  function getAuthorSurname(name) {
+    const author = normalizeText(name);
+    if (author.includes(',')) {
+      return author.split(',')[0].replace(/\s+/g, '');
+    }
+
+    const parts = author.split(' ').filter(Boolean);
+    if (parts.length > 1 && /^(?:jr\.?|sr\.?|ii|iii|iv)$/i.test(parts[parts.length - 1])) {
+      parts.pop();
+    }
+    let start = parts.length - 1;
+    while (start > 0 && /^(?:al|bin|da|das|de|del|della|den|der|di|dos|du|ibn|la|le|ten|ter|van|von)$/i.test(parts[start - 1])) {
+      start -= 1;
+    }
+    return parts.slice(Math.max(0, start)).join('');
+  }
+
+  function getPublicationYear(value) {
+    const date = normalizeText(value);
+    return date.match(/^((?:19|20)\d{2})\d{4}$/)?.[1] ||
+      date.match(/\b((?:19|20)\d{2})\b/)?.[1] || '';
+  }
+
+  function getEbscoArticleCitation(modal) {
+    const title = getEbscoArticleTitle(modal);
+    const modalTitle = normalizeText(
+      modal?.querySelector('[data-auto="modal-header-metadata-title"]')?.textContent || ''
+    );
+    const metaTitle = getMetaContent('meta[name="citation_title"]') || getMetaContent('meta[name="dc.Title"]');
+    const comparableTitle = (value) => normalizeText(value).replace(/[. ]+$/g, '').toLowerCase();
+    const isSingleRecord = /\/(?:viewer\/(?:pdf|html)|search\/details)\/[^/]+/i.test(location.pathname);
+    // A results-page dialog can belong to a different record than the page metadata.
+    const usePageMetadata = isSingleRecord &&
+      (!modalTitle || comparableTitle(modalTitle) === comparableTitle(metaTitle));
+
+    const modalAuthor = normalizeText(
+      modal?.querySelector('[class*="__meta-data-contributors"] .delimited-list__item [dir="auto"]')?.textContent || ''
+    );
+    const author = getAuthorSurname(
+      (usePageMetadata ? getMetaContent('meta[name="citation_author"]') : '') || modalAuthor
+    );
+    const modalDate = normalizeText(
+      modal?.querySelector('[class*="__meta-data-publication-year"]')?.textContent || ''
+    );
+    const dates = [modalDate];
+    if (usePageMetadata) {
+      dates.push(
+        getMetaContent('meta[name="citation_publication_date"]'),
+        getMetaContent('meta[name="citation_date"]'),
+        getMetaContent('meta[name="dc.Date"]')
+      );
+    }
+    const year = dates.map(getPublicationYear).find(Boolean) || '';
+
+    const journal = usePageMetadata ? getMetaContent('meta[name="citation_journal_title"]') : '';
+    const doi = usePageMetadata ? getMetaContent('meta[name="citation_doi"]') : '';
+    const doiCode = doi.match(/^(?:https?:\/\/(?:dx\.)?doi\.org\/)?10\.1287\/([a-z]+)[./-]/i)?.[1]?.toLowerCase();
+    const journalCode = INFORMS_JOURNALS.get(normalizeJournalName(journal)) ||
+      ([...INFORMS_JOURNALS.values()].includes(doiCode) ? doiCode : '');
+
+    return { title, author, year, journalCode };
+  }
+
   function installEbscoPdfRenamer() {
     const pageWindow = typeof unsafeWindow === 'undefined' ? window : unsafeWindow;
     const prototype = pageWindow.HTMLAnchorElement?.prototype;
@@ -509,13 +582,13 @@
 
       try {
         const modal = document.querySelector('.nuc-bulk-download-modal[role="dialog"]');
-        const pendingTitle =
+        const pendingCitation =
           pendingDownload?.pageKey === getPageKey() &&
           Date.now() - pendingDownload.savedAt < 60000
-            ? pendingDownload.title
-            : '';
-        const title = pendingTitle || getEbscoArticleTitle(modal);
-        const filename = buildPdfFilename(title);
+            ? pendingDownload.citation
+            : null;
+        const citation = pendingCitation || getEbscoArticleCitation(modal);
+        const filename = buildPdfFilename(citation.title, citation);
         if (filename) {
           pendingDownload = null;
           return filename;
@@ -572,9 +645,9 @@
         const modal = target.closest('[role="dialog"]');
         const fullTextTab = modal?.querySelector('[data-auto="fulltext-tab"][aria-selected="true"]');
         const selectedPdf = modal?.querySelector('input[name="fullText"][value="pdf"]:checked');
-        const title = fullTextTab && selectedPdf ? getEbscoArticleTitle(modal) : '';
-        if (title) {
-          pendingDownload = { title, pageKey: getPageKey(), savedAt: Date.now() };
+        const citation = fullTextTab && selectedPdf ? getEbscoArticleCitation(modal) : null;
+        if (citation?.title) {
+          pendingDownload = { citation, pageKey: getPageKey(), savedAt: Date.now() };
         }
       }
 

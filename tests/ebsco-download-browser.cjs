@@ -12,8 +12,17 @@ const pdfBytes = '%PDF-1.4\n% Filename regression test\n%%EOF\n';
 // These selectors and modal fields are from the supplied EBSCO viewer snapshot.
 const fixture = `<!doctype html><html><head><title>EBSCO</title>
   <meta name="citation_title" content="">
+  <meta name="citation_author" content="">
+  <meta name="citation_author" content="Other, Author">
+  <meta name="citation_publication_date" content="">
+  <meta name="citation_journal_title" content="">
+  <meta name="citation_doi" content="">
   </head><body><div class="nuc-bulk-download-modal" role="dialog">
   <h3 data-auto="modal-header-metadata-title"></h3>
+  <div class="nuc-modal-header-with-metadata__meta-data-contributors">
+    <span class="delimited-list__item"><span dir="auto"></span></span>
+  </div>
+  <p class="nuc-modal-header-with-metadata__meta-data-publication-year"></p>
   <div data-auto="fulltext-tab" aria-selected="true"></div>
   <input name="fullText" type="radio" value="pdf" checked>
   <button data-auto="bulk-download-modal-download-button">Download</button>
@@ -55,8 +64,16 @@ async function run() {
       await page.goto(source);
       await page.evaluate((config) => {
         document.querySelector('meta[name="citation_title"]').content = config.title || '';
+        for (const [field, key] of [
+          ['citation_author', 'author'], ['citation_publication_date', 'date'],
+          ['citation_journal_title', 'journal'], ['citation_doi', 'doi'],
+        ]) {
+          document.querySelector('meta[name="' + field + '"]').content = config[key] || '';
+        }
         document.title = config.pageTitle || 'EBSCO';
         document.querySelector('[data-auto="modal-header-metadata-title"]').textContent = config.modalTitle || '';
+        document.querySelector('.delimited-list__item [dir="auto"]').textContent = config.modalAuthor || '';
+        document.querySelector('[class*="__meta-data-publication-year"]').textContent = config.modalYear || '';
         window.testSettings = config;
       }, { filename: originalFilename, bytes: pdfBytes, title, ...settings });
 
@@ -105,22 +122,78 @@ async function run() {
     await check('other websites unaffected', { source: 'https://example.com/article' }, originalFilename);
     await check('long Unicode title', { title: '\u8bba\u6587'.repeat(160) }, '\u8bba\u6587'.repeat(36) + '\u8bba.pdf');
 
+    const citation = { author: 'Xiao, Jin', date: '20230901', journal: 'INFORMS Journal on Computing' };
+    const citationExpected = 'Xiao2023ijoc. ' + expected;
+    await check('provided EBSCO citation metadata', citation, citationExpected);
+    await check('requested author-year-journal format', {
+      author: 'Akkas, Arzum', date: '2019-04-01', journal: 'Management Science', title: 'Drivers of Retail Performance.',
+    }, 'Akkas2019mnsc. Drivers of Retail Performance.pdf');
+    await check('given-name-first author', { ...citation, author: 'Jin Xiao' }, citationExpected);
+    await check('compound surname', { ...citation, author: 'Ludwig van der Waals' }, 'vanderWaals2023ijoc. ' + expected);
+    await check('EBSCO journal publisher suffix', { ...citation, journal: 'Management Science (INFORMS)' }, 'Xiao2023mnsc. ' + expected);
+    await check('journal ampersand variant', {
+      ...citation, journal: 'Manufacturing and Service Operations Management',
+    }, 'Xiao2023msom. ' + expected);
+    await check('INFORMS DOI journal fallback', {
+      ...citation, journal: '', doi: '10.1287/ijoc.2023.1297',
+    }, citationExpected);
+    await check('unknown journal omits code', { ...citation, journal: 'Another Journal' }, 'Xiao2023. ' + expected);
+    await check('missing year omits year', { ...citation, date: '' }, 'Xiaoijoc. ' + expected);
+    await check('missing author omits author', { ...citation, author: '' }, '2023ijoc. ' + expected);
+    await check('citation snapshot survives modal closing', { ...citation, modalTitle: title, closeModal: true }, citationExpected);
+    await check('results dialog author and year', {
+      source: 'https://research.ebsco.com/c/test/search/results?q=research',
+      title: '', modalTitle: title, modalAuthor: 'Xiao, Jin', modalYear: '2023', closeModal: true,
+    }, 'Xiao2023. ' + expected);
+    await check('different record modal ignores stale page metadata', {
+      ...citation, title: 'Stale Metadata', modalTitle: title, modalAuthor: 'New, Author', modalYear: '2020', closeModal: true,
+    }, 'New2020. ' + expected);
+
+    const journalCodes = [
+      ['Decision Analysis', 'deca'],
+      ['Information Systems Research', 'isre'],
+      ['INFORMS Journal on Applied Analytics', 'ijaa'],
+      ['INFORMS Journal on Computing', 'ijoc'],
+      ['INFORMS Journal on Data Science', 'ijds'],
+      ['INFORMS Journal on Optimization', 'ijoo'],
+      ['INFORMS Transactions on Education', 'ited'],
+      ['Management Science', 'mnsc'],
+      ['Manufacturing & Service Operations Management', 'msom'],
+      ['Marketing Science', 'mksc'],
+      ['Mathematics of Operations Research', 'moor'],
+      ['Operations Research', 'opre'],
+      ['Organization Science', 'orsc'],
+      ['Service Science', 'serv'],
+      ['Stochastic Systems', 'stsy'],
+      ['Strategy Science', 'stsc'],
+      ['Transportation Science', 'trsc'],
+    ];
+    for (const [journal, code] of journalCodes) {
+      await check(`journal URL code: ${code}`, { ...citation, journal }, `Xiao2023${code}. ` + expected);
+    }
+
     // One tab, two records: the second download must not reuse the first title.
     await page.goto('https://research.ebsco.com/c/test/viewer/pdf/record-one');
-    for (const recordTitle of ['First Paper', 'Second Paper']) {
+    for (const record of [
+      { title: 'First Paper', author: 'First, Jane', date: '2019', journal: 'Management Science', code: 'mnsc' },
+      { title: 'Second Paper', author: 'Second, Jane', date: '2020', journal: 'Operations Research', code: 'opre' },
+    ]) {
       await page.evaluate((config) => {
         history.pushState({}, '', config.pathname);
         document.querySelector('meta[name="citation_title"]').content = config.title;
+        document.querySelector('meta[name="citation_author"]').content = config.author;
+        document.querySelector('meta[name="citation_publication_date"]').content = config.date;
+        document.querySelector('meta[name="citation_journal_title"]').content = config.journal;
         window.testSettings = config;
       }, {
-        title: recordTitle,
-        pathname: `/c/test/viewer/pdf/${recordTitle === 'First Paper' ? 'one' : 'two'}`,
+        ...record,
+        pathname: `/c/test/viewer/pdf/${record.title === 'First Paper' ? 'one' : 'two'}`,
         filename: originalFilename, bytes: pdfBytes,
       });
       const downloadEvent = page.waitForEvent('download');
       await page.locator('button').click();
       const download = await downloadEvent;
-      assert.equal(download.suggestedFilename(), `${recordTitle}.pdf`);
+      assert.equal(download.suggestedFilename(), `${record.author.split(',')[0]}${record.date}${record.code}. ${record.title}.pdf`);
       await download.delete();
     }
     count += 1;

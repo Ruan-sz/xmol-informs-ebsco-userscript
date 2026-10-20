@@ -1,6 +1,6 @@
 # UTD Easy Reach
 
-一个简化论文访问流程的 Tampermonkey 用户脚本。支持 SAGE/Wiley POMS 到中图易阅的即时跳转、INFORMS/X-MOL 到 EBSCO 的一键检索，以及 EBSCO PDF 按论文标题命名。
+一个简化论文访问流程的 Tampermonkey 用户脚本。支持 SAGE/Wiley POMS 到中图易阅的即时跳转、INFORMS/X-MOL 到 EBSCO 的一键检索，以及 EBSCO PDF 按作者、年份、期刊代码和标题命名。
 
 ## 安装与使用
 
@@ -27,11 +27,19 @@
 - INFORMS：进入论文详情页，标题出现后页面会显示 `EBSCO 搜索` 按钮；点击后复制标题并打开 EBSCO 搜索结果。
 - X-MOL：当论文属于下方 INFORMS 期刊白名单时显示 `EBSCO 搜索` 按钮。
 - EBSCO：如果第一次进入时要求登录，完成登录后脚本会继续进入原本的搜索结果页。
-- EBSCO PDF：照常点击阅读器的“下载”，选择 PDF 后确认，文件名会自动使用论文标题，例如 `Black-Box Attack-Based Security Evaluation Framework for Credit Card Fraud Detection Models.pdf`。
+- EBSCO PDF：照常点击阅读器的“下载”，选择 PDF 后确认，文件名会自动使用“第一作者姓氏 + 年份 + 期刊代码. 论文标题”，例如 `Akkas2019mnsc. Drivers of Retail Performance.pdf`。
 
 ### EBSCO PDF 文件名
 
-更新到 `0.9.0` 后，刷新已打开的 EBSCO 页面，再使用原来的下载按钮。脚本自动替换 `EBSCO-FullText-日期.pdf`；不需要新增操作，也不会重新请求 PDF。
+更新到 `0.10.0` 后，刷新已打开的 EBSCO 页面，再使用原来的下载按钮。脚本自动替换 `EBSCO-FullText-日期.pdf`；不需要新增操作，也不会重新请求 PDF。
+
+命名格式为 `第一作者姓氏年份期刊代码. 论文标题.pdf`。年份使用文献发表年份；期刊代码使用下表中 INFORMS 期刊网址的代码。作者、年份或期刊代码缺失时省略对应部分，标题始终保留。
+
+例如，页面标注第一作者为 `Xiao, Jin`、发表日期为 `20230901`、期刊为 `INFORMS Journal on Computing` 时，文件名为：
+
+```text
+Xiao2023ijoc. Black-Box Attack-Based Security Evaluation Framework for Credit Card Fraud Detection Models.pdf
+```
 
 - Windows 禁用的 `<>:"/\|?*` 和控制字符替换为空格，移除文件名末尾的句点、空格。
 - `CON`、`NUL`、`COM1` 等系统保留名称会加 `_` 前缀；过长标题会截短，并保留完整的 `.pdf` 扩展名。
@@ -48,25 +56,29 @@
 - `https://research.ebsco.com/*`
 - `https://www.x-mol.com/paper/*`
 
-## X-MOL 白名单期刊
+## INFORMS 期刊代码
 
-- Decision Analysis
-- Information Systems Research
-- INFORMS Journal on Applied Analytics
-- INFORMS Journal on Computing
-- INFORMS Journal on Data Science
-- INFORMS Journal on Optimization
-- INFORMS Transactions on Education
-- Management Science
-- Manufacturing & Service Operations Management
-- Marketing Science
-- Mathematics of Operations Research
-- Operations Research
-- Organization Science
-- Service Science
-- Stochastic Systems
-- Strategy Science
-- Transportation Science
+这份列表同时用于 X-MOL 按钮白名单和 EBSCO PDF 文件名。代码与 `pubsonline.informs.org/journal/<代码>` 一致。
+
+| 期刊 | 代码 |
+| --- | --- |
+| Decision Analysis | `deca` |
+| Information Systems Research | `isre` |
+| INFORMS Journal on Applied Analytics | `ijaa` |
+| INFORMS Journal on Computing | `ijoc` |
+| INFORMS Journal on Data Science | `ijds` |
+| INFORMS Journal on Optimization | `ijoo` |
+| INFORMS Transactions on Education | `ited` |
+| Management Science | `mnsc` |
+| Manufacturing & Service Operations Management | `msom` |
+| Marketing Science | `mksc` |
+| Mathematics of Operations Research | `moor` |
+| Operations Research | `opre` |
+| Organization Science | `orsc` |
+| Service Science | `serv` |
+| Stochastic Systems | `stsy` |
+| Strategy Science | `stsc` |
+| Transportation Science | `trsc` |
 
 ## 更新与 Greasy Fork 同步
 
@@ -97,7 +109,7 @@ https://raw.githubusercontent.com/Ruan-sz/xmol-informs-ebsco-userscript/main/GRE
 ## 隐私与使用范围
 
 - 脚本不收集或上传个人数据。
-- EBSCO 检索和 PDF 命名仅读取当前论文标题；检索按钮同时将标题复制到剪贴板。
+- EBSCO 检索和 PDF 命名仅读取当前论文的标题、作者、年份和期刊等题录信息；检索按钮只将标题复制到剪贴板。
 - EBSCO 待续跳记录仅保存在用户脚本本地存储中，并会在完成或过期后清除。
 - 脚本用于简化合法订阅资源的访问流程，不绕过网站登录或机构授权。
 
