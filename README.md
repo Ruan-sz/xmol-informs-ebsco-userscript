@@ -1,6 +1,6 @@
 # UTD Easy Reach
 
-一个简化论文访问流程的 Tampermonkey 用户脚本。目前支持 SAGE 与 Wiley POMS 旧链接到中图易阅的即时跳转，以及 INFORMS/X-MOL 到 EBSCO 的一键检索。
+一个简化论文访问流程的 Tampermonkey 用户脚本。支持 SAGE/Wiley POMS 到中图易阅的即时跳转、INFORMS/X-MOL 到 EBSCO 的一键检索，以及 EBSCO PDF 按论文标题命名。
 
 ## 安装与使用
 
@@ -27,6 +27,18 @@
 - INFORMS：进入论文详情页，标题出现后页面会显示 `EBSCO 搜索` 按钮；点击后复制标题并打开 EBSCO 搜索结果。
 - X-MOL：当论文属于下方 INFORMS 期刊白名单时显示 `EBSCO 搜索` 按钮。
 - EBSCO：如果第一次进入时要求登录，完成登录后脚本会继续进入原本的搜索结果页。
+- EBSCO PDF：照常点击阅读器的“下载”，选择 PDF 后确认，文件名会自动使用论文标题，例如 `Black-Box Attack-Based Security Evaluation Framework for Credit Card Fraud Detection Models.pdf`。
+
+### EBSCO PDF 文件名
+
+更新到 `0.9.0` 后，刷新已打开的 EBSCO 页面，再使用原来的下载按钮。脚本自动替换 `EBSCO-FullText-日期.pdf`；不需要新增操作，也不会重新请求 PDF。
+
+- Windows 禁用的 `<>:"/\|?*` 和控制字符替换为空格，移除文件名末尾的句点、空格。
+- `CON`、`NUL`、`COM1` 等系统保留名称会加 `_` 前缀；过长标题会截短，并保留完整的 `.pdf` 扩展名。
+- 找不到单篇论文标题时保留原名；音频、HTML、压缩包和已自定义文件名不受影响。
+- 此功能针对 EBSCO 网页下载按钮，不修改浏览器自带 PDF 阅读器的“另存为”或已下载到本地的文件。
+
+脚本新增的 `unsafeWindow` 权限用于在 EBSCO 网页生成下载链接时修改文件名。
 
 ## 支持站点
 
@@ -85,7 +97,7 @@ https://raw.githubusercontent.com/Ruan-sz/xmol-informs-ebsco-userscript/main/GRE
 ## 隐私与使用范围
 
 - 脚本不收集或上传个人数据。
-- 点击 EBSCO 按钮时，只会读取并复制当前论文标题。
+- EBSCO 检索和 PDF 命名仅读取当前论文标题；检索按钮同时将标题复制到剪贴板。
 - EBSCO 待续跳记录仅保存在用户脚本本地存储中，并会在完成或过期后清除。
 - 脚本用于简化合法订阅资源的访问流程，不绕过网站登录或机构授权。
 
@@ -96,6 +108,7 @@ https://raw.githubusercontent.com/Ruan-sz/xmol-informs-ebsco-userscript/main/GRE
 - `GREASYFORK.md`：Greasy Fork 附加信息的同步来源及可复制 Markdown。
 - `CHANGELOG.md`：版本更新记录。
 - `tests/redirect-smoke.cjs`：SAGE/Wiley DOI 重定向冒烟测试。
+- `tests/ebsco-download-browser.cjs`：浏览器实际下载与文件命名回归测试（需要 Playwright 和 Chrome）。
 - `LICENSE`：MIT 许可证。
 
 仓库暂时保留原名称，以保证已有链接稳定；脚本和文档统一使用 `UTD Easy Reach`。
@@ -104,6 +117,12 @@ https://raw.githubusercontent.com/Ruan-sz/xmol-informs-ebsco-userscript/main/GRE
 
 ```powershell
 node tests/redirect-smoke.cjs
+```
+
+在已安装 Playwright 和 Chrome 的环境中运行下载测试：
+
+```powershell
+node tests/ebsco-download-browser.cjs
 ```
 
 ## 许可证

@@ -4,11 +4,11 @@
 // @name:zh      UTD Easy Reach
 // @name:en      UTD Easy Reach
 // @namespace    https://pubsonline.informs.org/
-// @version      0.8.1
-// @description  Redirect SAGE and legacy Wiley POMS DOI pages to CNP eReading, with one-click EBSCO search from INFORMS/X-MOL.
-// @description:zh-CN 将 SAGE 与 Wiley POMS DOI 页面跳转到中图易阅，并从 INFORMS/X-MOL 一键检索 EBSCO。
-// @description:zh 将 SAGE 与 Wiley POMS DOI 页面跳转到中图易阅，并从 INFORMS/X-MOL 一键检索 EBSCO。
-// @description:en Redirect SAGE and legacy Wiley POMS DOI pages to CNP eReading, with one-click EBSCO search from INFORMS/X-MOL.
+// @version      0.9.0
+// @description  Reach SAGE and Wiley POMS via CNP eReading, search EBSCO from INFORMS/X-MOL, and name EBSCO PDFs after article titles.
+// @description:zh-CN 快速访问 SAGE/Wiley POMS，从 INFORMS/X-MOL 检索 EBSCO，并以论文标题命名 EBSCO PDF。
+// @description:zh 快速访问 SAGE/Wiley POMS，从 INFORMS/X-MOL 检索 EBSCO，并以论文标题命名 EBSCO PDF。
+// @description:en Reach SAGE and Wiley POMS via CNP eReading, search EBSCO from INFORMS/X-MOL, and name EBSCO PDFs after article titles.
 // @author       Ruan-sz
 // @license      MIT
 // @homepageURL  https://github.com/Ruan-sz/xmol-informs-ebsco-userscript
@@ -28,12 +28,13 @@
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_deleteValue
+// @grant        unsafeWindow
 // ==/UserScript==
 
 (function () {
   'use strict';
 
-  const SCRIPT_VERSION = '0.8.1';
+  const SCRIPT_VERSION = '0.9.0';
   const BUTTON_ID = 'codex-ebsco-search-button';
   const CONTAINER_ID = 'codex-ebsco-search-container';
   const PENDING_SEARCH_KEY = 'codex-ebsco-pending-search';
@@ -426,6 +427,162 @@
 
     log('检测到待续跳搜索，自动前往目标 EBSCO 搜索页');
     location.replace(pending.url);
+  }
+
+  function buildPdfFilename(title) {
+    let stem = normalizeText(title)
+      .normalize('NFC')
+      .replace(/\.pdf$/i, '')
+      .replace(/[<>:"/\\|?*\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/[. ]+$/g, '');
+
+    if (!stem) {
+      return '';
+    }
+
+    // Windows reserves these stems even when they have an extension.
+    if (/^(?:con|prn|aux|nul|com[1-9\u00b9\u00b2\u00b3]|lpt[1-9\u00b9\u00b2\u00b3])(?:\.|$)/i.test(stem)) {
+      stem = `_${stem}`;
+    }
+
+    const encoder = new TextEncoder();
+    let shortened = '';
+    let byteLength = 0;
+    for (const character of stem) {
+      const bytes = encoder.encode(character).length;
+      if (shortened.length + character.length > 180 || byteLength + bytes > 220) {
+        break;
+      }
+      shortened += character;
+      byteLength += bytes;
+    }
+
+    shortened = shortened.replace(/[. ]+$/g, '');
+    return shortened ? `${shortened}.pdf` : '';
+  }
+
+  function getEbscoArticleTitle(modal) {
+    const modalTitle = normalizeText(
+      modal?.querySelector('[data-auto="modal-header-metadata-title"]')?.textContent || ''
+    );
+    if (modalTitle) {
+      return modalTitle;
+    }
+
+    // A results page title may describe a query or several papers.
+    if (!/\/(?:viewer\/(?:pdf|html)|search\/details)\/[^/]+/i.test(location.pathname)) {
+      return '';
+    }
+
+    const title =
+      getMetaContent('meta[name="citation_title"]') ||
+      getMetaContent('meta[name="dc.Title"]') ||
+      normalizeText(document.title).replace(/\s+[-|]\s+EBSCO(?:host)?(?: Research Databases)?\s*$/i, '');
+
+    return /^EBSCO(?:host)?$/i.test(title) ? '' : title;
+  }
+
+  function installEbscoPdfRenamer() {
+    const pageWindow = typeof unsafeWindow === 'undefined' ? window : unsafeWindow;
+    const prototype = pageWindow.HTMLAnchorElement?.prototype;
+    if (!prototype) {
+      return;
+    }
+
+    const marker = pageWindow.Symbol.for('utd-easy-reach.ebsco-pdf-renamer');
+    if (prototype[marker]) {
+      return;
+    }
+
+    const nativeDownload = Object.getOwnPropertyDescriptor(prototype, 'download');
+    const nativeSetAttribute = prototype.setAttribute;
+    const nativeClick = prototype.click;
+    let pendingDownload = null;
+
+    const getPageKey = () => `${location.origin}${location.pathname}`;
+    const getFilename = (requestedName) => {
+      if (!/^EBSCO[-_ ]FullText(?:[-_ ].*)?\.pdf$/i.test(String(requestedName))) {
+        return requestedName;
+      }
+
+      try {
+        const modal = document.querySelector('.nuc-bulk-download-modal[role="dialog"]');
+        const pendingTitle =
+          pendingDownload?.pageKey === getPageKey() &&
+          Date.now() - pendingDownload.savedAt < 60000
+            ? pendingDownload.title
+            : '';
+        const title = pendingTitle || getEbscoArticleTitle(modal);
+        const filename = buildPdfFilename(title);
+        if (filename) {
+          pendingDownload = null;
+          return filename;
+        }
+      } catch (error) {
+        log('无法按论文标题命名，保留 EBSCO 原文件名', error);
+      }
+
+      return requestedName;
+    };
+
+    const exportCallback = (callback) =>
+      typeof exportFunction === 'function' ? exportFunction(callback, pageWindow) : callback;
+
+    try {
+      if (nativeDownload?.set) {
+        Object.defineProperty(prototype, 'download', {
+          ...nativeDownload,
+          set: exportCallback(function (name) {
+            return nativeDownload.set.call(this, getFilename(name));
+          }),
+        });
+      }
+
+      // EBSCO may prepare a detached anchor and click it before it reaches the DOM.
+      Object.defineProperty(prototype, 'setAttribute', {
+        configurable: true,
+        writable: true,
+        value: exportCallback(function (name, value) {
+          const nextValue = String(name).toLowerCase() === 'download' ? getFilename(value) : value;
+          return nativeSetAttribute.call(this, name, nextValue);
+        }),
+      });
+      Object.defineProperty(prototype, 'click', {
+        configurable: true,
+        writable: true,
+        value: exportCallback(function (...args) {
+          const name = this.getAttribute('download');
+          if (name) {
+            nativeSetAttribute.call(this, 'download', getFilename(name));
+          }
+          return nativeClick.apply(this, args);
+        }),
+      });
+      Object.defineProperty(prototype, marker, { value: true });
+    } catch (error) {
+      log('安装 EBSCO PDF 命名处理失败', error);
+    }
+
+    document.addEventListener('click', (event) => {
+      const target = event.target?.closest?.('button, a');
+      if (target?.matches('[data-auto="bulk-download-modal-download-button"]')) {
+        pendingDownload = null;
+        const modal = target.closest('[role="dialog"]');
+        const fullTextTab = modal?.querySelector('[data-auto="fulltext-tab"][aria-selected="true"]');
+        const selectedPdf = modal?.querySelector('input[name="fullText"][value="pdf"]:checked');
+        const title = fullTextTab && selectedPdf ? getEbscoArticleTitle(modal) : '';
+        if (title) {
+          pendingDownload = { title, pageKey: getPageKey(), savedAt: Date.now() };
+        }
+      }
+
+      if (target?.matches('a[download]')) {
+        const name = target.getAttribute('download');
+        nativeSetAttribute.call(target, 'download', getFilename(name));
+      }
+    }, true);
   }
 
   function flashButton(message, isError = false) {
@@ -837,6 +994,7 @@
     log('从 document-start 开始观察论文页结构', location.href);
     startSourceWatcher();
   } else if (isEbscoHost()) {
+    installEbscoPdfRenamer();
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', initEbscoPage, { once: true });
     } else {
